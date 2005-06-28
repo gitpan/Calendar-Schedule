@@ -1,0 +1,16 @@
+Revision history for Perl extension Calendar::Schedule.
+
+0.01  2002 (some time)
+	- initial version
+
+0.02  Tue Jun 28 08:02:46 ADT 2005
+	- documentation improvement
+	- changable column labels (ColLabel)
+	- improved weekly events
+	- introduce format with several weekdays, e.g.:
+	  Mon,Wed,Fri 15:30-16:30 meeting (product team)
+        - fixed conflict handling; shows in several columns per day
+	- fixed a bug with daylight saving time for weekly events
+        - added support for :start and :biweekly tags
+	- added support for :until
+	- improved date format, e.g.: 1-Jul-2005
