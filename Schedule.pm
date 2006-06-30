@@ -1,6 +1,7 @@
-# (c) 2003-2005 Vlado Keselj www.cs.dal.ca/~vlado
+# (c) 2003-2006 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm,v 1.15 2005/06/28 11:03:06 vlado Exp $
+# $Id: Schedule.pm,v 1.22 2006/06/30 10:44:52 vlado Exp $
+# <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
 use strict;
@@ -13,11 +14,15 @@ our @ISA = qw(Exporter);
 our %EXPORT_TAGS = ( 'all' => [ qw( parse_time ) ] );
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(new);
-our $VERSION = '0.02';
+
+#<?echo "our \$VERSION = '$Meta->{version}';"!>
+#+
+our $VERSION = '0.04';
+#-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 1.15 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 1.22 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 );
@@ -58,6 +63,7 @@ The file .calendar may look like this:
   Mon 9:00-10:00 this is a weekly entry
   Mon 13-14 a biweekly entry :biweekly :start Mar 8, 2004
   Mon,Wed,Fri 15:30-16:30 several-days-a-week entry
+  Wed :biweekly garbage collection
 
   2004-03-06 Sat 14-16 fixed entry. The week day is redundant, but may\
         help to detect confusion (error will be reported if a wrong\
@@ -524,7 +530,7 @@ sub parse_time {
     { $ret = mktime(0,0,0,$2,&month_to_digits($1),$3-1900,-1,-1,-1) }
     elsif ($time =~ /^\d+$endrex/) { $ret = $time }
     elsif ($time =~/^now\b$endrex/) { $ret = time }
-    else { die "cannot parse time:($time)" }
+    else { use Carp; confess "cannot parse time:($time)" }
     $ret2 = $';
     return wantarray ? ($ret, $ret2) : $ret;
 }
@@ -583,7 +589,8 @@ More format examples:
 sub add_entry {
     my $self = shift;
 
-    if ($#_ <= 1) {
+    if ($#_ <= 1) {		# entry not structured, needs to be
+				# parsed (string)		
 	my $timeslot = shift;
 	my $description;
 	if ($#_ == 0) { $description = shift }
@@ -596,6 +603,10 @@ sub add_entry {
 	    { $timeslot = $&; $description = $'; }
 	    #<? $CP.="Wed 3-4:30pm meeting\n" !>
 	    elsif (/^$REweekday3(?:,$REweekday3)* \d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)? /)
+	    { $timeslot = $&; $description = $'; }
+	    #iso8601 thanks to Mike Vasiljevs
+	    elsif (/^(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)-
+                     (\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)?/x)
 	    { $timeslot = $&; $description = $'; }
 	    elsif (/^(\d\d\d\d-\d\d-\d\d) / ||
 		   /^(\d?\d-\w\w\w-\d\d\d\d) /
@@ -611,7 +622,9 @@ sub add_entry {
 		push @{ $self->{'ToDo'}}, { desc=>$' };
 		return;
 	    }
-	    else { die "cannot parse timeslot:($_)" }
+	    #<? $CP.="Wed :biweekly garbage collection\n" !>
+	    elsif (/^($REweekday3)\b\s*/) { $timeslot=$1; $description=$'; }
+	    else { ($timeslot, $description) = parse_time($_, 1) }
 	    $timeslot =~ s/\s+$//;
 	}
 
@@ -645,6 +658,50 @@ sub add_entry {
 		$vevent{'RRULE'} = $rrule;
 		$vevent{'DTSTART'} = $self->find_next_time("$d $stime", $starttime);
 		$vevent{'DTEND'}   = $self->find_next_time("$d $etime", $vevent{'DTSTART'});
+		$vevent{'SUMMARY'} = $description;
+		push @{ $self->{'VEvents'} }, \%vevent;
+	    }
+	    return;
+	}
+        # thanks to Mike Vasiljevs:
+        # 25 may 2006, adding matching for iso8601 dates
+        #
+        elsif ($timeslot =~ /^(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)-
+                              (\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)$/x)	{
+	    my ($hstart, $mstart, $sstart) = split(":", $2);
+	    my ($hend, $mend, $send) = split(":", $4);
+	    $starttime = parse_time("$1 $hstart:$mstart");
+	    $endtime   = parse_time("$1 $hend:$mend");
+	    ##correct is to use second date in endtime, but it may lead to time leaks!?
+	    #$endtime   = parse_time("$3 $hend$mend");
+	}
+
+	elsif ($timeslot =~ /^($REweekday3(?:,$REweekday3)*)$/) {
+	    my ($days) = ($1);
+
+	    my $rrule = 'FREQ=WEEKLY';
+	    if ($description =~ /\s*:biweekly\b\s*/) {
+		$description = "$` $'";
+		$rrule .= ':INTERVAL=2';
+	    }
+	    if ($description =~ /\s*:until\s+/) {
+		my $p1 = $`; my $p2 = $';
+		my ($t, $p2n) = parse_time($p2, 1);
+		$description = "$p1 $p2n";
+		$rrule .= ";UNTIL=".$self->find_next_time("23:59", $t);
+	    }
+	    my $starttime = $self->{'StartTime'};
+	    if ($description =~ /:start\s+/) {
+		my $d1 = $`; my $d2 = $';
+		($starttime, $d2) = parse_time($d2, 1);
+		$description = "$d1$d2";
+	    }
+	    
+	    foreach my $d (split(/,/, $days)) {
+		my %vevent = ();
+		$vevent{'DTSTART'} = $self->find_next_time("$d 00:00", $starttime);
+		# not DTEND signals DayEntry
+		$vevent{'RRULE'} = $rrule;
 		$vevent{'SUMMARY'} = $description;
 		push @{ $self->{'VEvents'} }, \%vevent;
 	    }
@@ -799,7 +856,7 @@ so that consecutive call produces a new table.
 =cut
 sub generate_table {
     my $self = shift;
-    my @prepareEntries;
+    my (@prepareEntries, @dayEntries);
 
     $self->{'NextTableTime'} = $self->{'StartTime'}
       if ! exists($self->{'NextTableTime'});
@@ -821,19 +878,32 @@ sub generate_table {
 	    if ($ve->{'RRULE'} =~ /\bINTERVAL=(\d+)/) { $interval = $1 }
 	    my $until = undef;	    
 	    if ($ve->{'RRULE'} =~ /\bUNTIL=(\d+)/) { $until = $1 }
+
 	    while ($d + $ve->{'DTSTART'} < $mondaytime + 86400*7) {
 		if (defined($until) && $d+$ve->{'DTSTART'} > $until) { last }
+
 		if ($d+$ve->{'DTSTART'} >= $mondaytime) {
-		    push @prepareEntries,
-		    { starttime => $d+$ve->{'DTSTART'},
-		      endtime   => $d+$ve->{'DTEND'},
-		      description => $ve->{'SUMMARY'} };
+		    if (exists($ve->{'DTEND'})) {
+			push @prepareEntries,
+			{ starttime => $d+$ve->{'DTSTART'},
+			  endtime   => $d+$ve->{'DTEND'},
+			  description => $ve->{'SUMMARY'} };
+		    } else {
+			push @dayEntries,
+			{ date => $d+$ve->{'DTSTART'},
+			  description => $ve->{'SUMMARY'} };
+		    }
 		}
 		my @a = localtime($d+$ve->{'DTSTART'});
 		$d += 86400*7*$interval;
-		my @b = localtime($d+$ve->{'DTEND'});
+		my @b;
+		if (exists($ve->{'DTEND'})) {
+		    @b = localtime($d+$ve->{'DTEND'});
+		}
+		else { @b = localtime($d+$ve->{'DTSTART'} + 60) }
 		$d += ($a[8]-$b[8])*3600; # daylight saving
 	    }
+
 	}
     }
 
@@ -893,7 +963,7 @@ sub generate_table {
     $r .= "</tr>\n";
 
     # check if there are any DayEntries
-    my @dayEntries = grep { $_->{'date'} - $mondaytime >=0 &&
+    push @dayEntries, grep { $_->{'date'} - $mondaytime >=0 &&
 			    $_->{'date'} - $mondaytime <= 7*86400 }
                      @{ $self->{'DayEntries'} };
     if ( @dayEntries ) {
@@ -1062,9 +1132,14 @@ sub _getfile($) {
 1;
 __END__
 
+=head1 THANKS
+
+I would like to thank Mike Vasiljevs for his suggestions and patches
+for ISO8601 format.
+
 =head1 AUTHOR
 
-Copyright 2003-2004 Vlado Keselj www.cs.dal.ca/~vlado
+Copyright 2003-2006 Vlado Keselj http://www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under

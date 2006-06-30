@@ -14,3 +14,12 @@ Revision history for Perl extension Calendar::Schedule.
         - added support for :start and :biweekly tags
 	- added support for :until
 	- improved date format, e.g.: 1-Jul-2005
+
+0.03  Fri Jun 30 07:25:25 ADT 2006
+	- recurring (weekly/biweekly) day events; e.g.
+          Wed :biweekly garbage collection
+	- debugging dayly biweekly, daylight saving time
+	- added support to iso8601, patch by Mike Vasiljevs
+
+0.04
+	-

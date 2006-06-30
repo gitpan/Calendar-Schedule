@@ -1,7 +1,7 @@
-<? read_starfish_conf();echo "Calendar/Schedule version $ModuleVersion\n".'='x26!>
+<? read_starfish_conf(); echo &readme_line(); !>
 #+
-Calendar/Schedule version 
-==========================
+Calendar::Schedule version 0.04
+===============================
 #-
 
 This is a Perl module for handling calendar schedules.  Documentation
@@ -21,11 +21,11 @@ To install this module type the following:
 
 DEPENDENCIES
 
-No known dependecies yet.
+No known dependencies yet.
 
 COPYRIGHT AND LICENCE
 
-Copyright 2003 Vlado Keselj www.cs.dal.ca/~vlado
+Copyright 2003-2006 Vlado Keselj www.cs.dal.ca/~vlado
 
 This script is provided "as is" without express or implied warranty.
 This is free software; you can redistribute it and/or modify it under
