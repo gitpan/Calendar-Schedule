@@ -1,6 +1,6 @@
-# (c) 2003-2006 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2003-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm,v 1.22 2006/06/30 10:44:52 vlado Exp $
+# $Id: Schedule.pm,v 1.25 2008/09/03 11:31:20 vlado Exp $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,12 +17,12 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 1.22 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 1.25 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 );
@@ -66,8 +66,8 @@ The file .calendar may look like this:
   Wed :biweekly garbage collection
 
   2004-03-06 Sat 14-16 fixed entry. The week day is redundant, but may\
-        help to detect confusion (error will be reported if a wrong\
-        weekday is entered).  BTW, an entry an go for several lines as\
+        help to detect errors (error will be reported if a wrong\
+        weekday is entered).  BTW, an entry can go for several lines as\
         long as there is a backslash at the end of each line.
 
   May   6      birthday (yearly entry)
@@ -431,7 +431,8 @@ sub new {
 	       ToDo => [ ],
                RowLabels => [ ],
                StartTime => 0,
-	       ColLabel => "%A<br>%Y-%m-%d"
+	       ColLabel => "%A<br>%Y-%m-%d",
+	       ShowDays => 'all', # 'workdays'
              };
 
   bless($self, $class);
@@ -602,7 +603,7 @@ sub add_entry {
 	    elsif (/^\d\d\d\d-\d\d-\d\d \d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)? /)
 	    { $timeslot = $&; $description = $'; }
 	    #<? $CP.="Wed 3-4:30pm meeting\n" !>
-	    elsif (/^$REweekday3(?:,$REweekday3)* \d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)? /)
+	    elsif (/^$REweekday3(?:,$REweekday3)*\s+\d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)? /)
 	    { $timeslot = $&; $description = $'; }
 	    #iso8601 thanks to Mike Vasiljevs
 	    elsif (/^(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)-
@@ -630,7 +631,7 @@ sub add_entry {
 
 	my ($starttime, $endtime);
 
-	if ($timeslot =~ /^($REweekday3(?:,$REweekday3)*) (\d\d?(?::\d\d)?)-(\d\d?(?::\d\d)?)((?:[ap]m)?)$/) {
+	if ($timeslot =~ /^($REweekday3(?:,$REweekday3)*)\s+(\d\d?(?::\d\d)?)-(\d\d?(?::\d\d)?)((?:[ap]m)?)$/) {
 	    my ($days,$stime,$etime,$ampm) = ($1, $2, $3, $4);
 	    $stime .= $ampm; $etime .= $ampm;
 
@@ -853,6 +854,19 @@ Returns a weekly table in HTML.  Starts with NextTableTime (or
 StartTime if NextTableTime does not exist), and updates NextTableTime
 so that consecutive call produces a new table.
 
+The table column headers can be can be changed by setting the field
+$obj->{ColLabel} to a format as used by the standard function
+strftime.  The default format is: ColLabel => "%A<br>%Y-%m-%d", which
+looks something like:
+
+   Monday
+ 2008-09-01
+
+The format "%A" would produce just the weekday name.
+
+Use $obj->{ShowDays} = 'workdays'; to display only work-days; i.e.,
+Monday to Friday.
+
 =cut
 sub generate_table {
     my $self = shift;
@@ -862,12 +876,15 @@ sub generate_table {
       if ! exists($self->{'NextTableTime'});
     my $mondaytime = $self->{'NextTableTime'};
 
+    my @showdays = 0..6; # ShowDays: all, workdays
+    if ($self->{ShowDays} eq 'workdays') { @showdays = 0..4 }
+
     my @col_label;
     {
 	my $p = $self->{'ColLabel'};
 	@col_label = map {
 	    strftime($p, localtime($mondaytime + $_*86400))
-	    } (0 .. 6);
+	    } @showdays;
     }
 
     foreach my $ve ( @{ $self->{'VEvents'} } ) {
@@ -879,7 +896,7 @@ sub generate_table {
 	    my $until = undef;	    
 	    if ($ve->{'RRULE'} =~ /\bUNTIL=(\d+)/) { $until = $1 }
 
-	    while ($d + $ve->{'DTSTART'} < $mondaytime + 86400*7) {
+	    while ($d + $ve->{'DTSTART'} < $mondaytime + 86400*scalar(@showdays)) {
 		if (defined($until) && $d+$ve->{'DTSTART'} > $until) { last }
 
 		if ($d+$ve->{'DTSTART'} >= $mondaytime) {
@@ -919,7 +936,7 @@ sub generate_table {
 	my $endtime     = $entry->{'endtime'};
 
 	my $col = floor(($starttime - $mondaytime) / 86400);
-	next if $col < 0 || $col >= 7;
+	next if $col < 0 || $col >= scalar(@showdays);
 	my $startlabel = strftime("%H:%M", localtime($starttime));
 	my $endlabel   = strftime("%H:%M", localtime($endtime));
 
@@ -945,7 +962,7 @@ sub generate_table {
       my $description = $entry->{'description'};
 
       my $col = floor(($starttime - $mondaytime) / 86400);
-      next if $col < 0 || $col >= 7;
+      next if $col < 0 || $col >= scalar(@showdays);
       my $startlabel = strftime("%H:%M", localtime($starttime));
       my $endlabel   = strftime("%H:%M", localtime($endtime));
 
@@ -964,7 +981,7 @@ sub generate_table {
 
     # check if there are any DayEntries
     push @dayEntries, grep { $_->{'date'} - $mondaytime >=0 &&
-			    $_->{'date'} - $mondaytime <= 7*86400 }
+			    $_->{'date'} - $mondaytime <= scalar(@showdays)*86400 }
                      @{ $self->{'DayEntries'} };
     if ( @dayEntries ) {
 	$r .= '<tr><td>&nbsp;</td>';
@@ -1139,7 +1156,7 @@ for ISO8601 format.
 
 =head1 AUTHOR
 
-Copyright 2003-2006 Vlado Keselj http://www.cs.dal.ca/~vlado
+Copyright 2003-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under

@@ -1,8 +1,18 @@
 Revision history for Perl extension Calendar::Schedule.
+	
+0.05  Wed Sep  3 08:31:37 ADT 2008
+	- improved documentation for $self->{ColLabel}
+	- added $self->{ShowDays} = 'workdays' option
 
-0.01  2002 (some time)
-	- initial version
-
+0.04  Fri Jun 30 07:49:13 ADT 2006
+	- minor change
+	
+0.03  Fri Jun 30 07:25:25 ADT 2006
+	- recurring (weekly/biweekly) day events; e.g.
+          Wed :biweekly garbage collection
+	- debugging dayly biweekly, daylight saving time
+	- added support to iso8601, patch by Mike Vasiljevs
+	
 0.02  Tue Jun 28 08:02:46 ADT 2005
 	- documentation improvement
 	- changable column labels (ColLabel)
@@ -15,11 +25,5 @@ Revision history for Perl extension Calendar::Schedule.
 	- added support for :until
 	- improved date format, e.g.: 1-Jul-2005
 
-0.03  Fri Jun 30 07:25:25 ADT 2006
-	- recurring (weekly/biweekly) day events; e.g.
-          Wed :biweekly garbage collection
-	- debugging dayly biweekly, daylight saving time
-	- added support to iso8601, patch by Mike Vasiljevs
-
-0.04
-	-
+0.01  2002 (some time)
+	- initial version
