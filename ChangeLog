@@ -1,4 +1,8 @@
 Revision history for Perl extension Calendar::Schedule.
+
+1.01  Mon Sep  8 06:28:03 ADT 2008
+	- fixed a small typo in documentation
+	- included t/01.t (previously omitted by mistake)
 	
 0.05  Wed Sep  3 08:31:37 ADT 2008
 	- improved documentation for $self->{ColLabel}
