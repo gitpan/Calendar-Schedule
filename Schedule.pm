@@ -1,6 +1,6 @@
-# (c) 2003-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm,v 1.26 2008/09/03 11:45:33 vlado Exp $
+# $Id: Schedule.pm 121 2010-01-26 12:22:37Z vlado $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,16 +17,17 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '1.01';
+our $VERSION = '1.02';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 1.26 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 121 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
-use vars qw( $REweekday3 $REmonth3 );
+use vars qw( $REweekday3 $REmonth3 $RE1st );
 
+$RE1st = qr/first|second|third|fourth|fifth|last|1st|2nd|3rd|4th|5th/;
 $REweekday3 = qr/Mon|Tue|Wed|Thu|Fri|Sat|Sun/;
 $REmonth3 = qr/Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec/;
 
@@ -58,7 +59,7 @@ The file .calendar may look like this:
 
   # comments can start with #
   * lines starting with * are treated as general todo entries ...
-  # empty lines are fine to:
+  # empty lines are acceptable and ignored:
 
   Mon 9:00-10:00 this is a weekly entry
   Mon 13-14 a biweekly entry :biweekly :start Mar 8, 2004
@@ -72,6 +73,8 @@ The file .calendar may look like this:
 
   May   6      birthday (yearly entry)
 
+  # more examples in "Example entries" section
+
 =head1 DESCRIPTION
 
 Description ...
@@ -80,6 +83,11 @@ Attempted to match the internal data representation with the iCalendar
 standard (RFC2445).  Examples of the iCalendar fields: DTSTART, DTEND, SUMMARY,
 RRULE (e.g. RRULE:FREQ=WEEKLY, RRULE:FREQ=WEEKLY;INTERVAL=2 for
 biweekly, RRULE:FREQ=WEEKLY;UNTIL=20040408 ) etc.
+More examples:
+
+  RRULE:FREQ=MONTHLY;BYDAY=TU;BYSETPOS=3
+
+Every third Tuesday in a month.
 
 =head1 EXAMPLES
 
@@ -400,6 +408,39 @@ will produce the following table (if run before Apr 8, 2005):
 </tr>
 </table>
 
+=head2 Example entries
+
+These are some example of simple entries that are accepted by the
+C<add_entry> function or C<add_entries_from> for reading from a file.
+Each entry is on a line by itself, but it can be continued in the the
+following lines by using \ (backslash) at the end of the current line.
+The time specificantions are generally at the beginning of an entry.
+Examples:
+
+  # comments can start with #
+  # empty lines are acceptable and ignored:
+
+  Mon 9:00-10:00 this is a weekly entry
+  Mon 13-14 a biweekly entry :biweekly :start Mar 8, 2004
+  Mon,Wed,Fri 15:30-16:30 several-days-a-week entry
+  Wed :biweekly garbage collection
+
+  2004-03-06 Sat 14-16 fixed entry. The week day is redundant, but may\
+        help to detect errors (error will be reported if a wrong\
+        weekday is entered).  BTW, an entry can go for several lines as\
+        long as there is a backslash at the end of each line.
+
+  May 6  an example birthday (yearly entry)
+
+  Wed 13:30-14:30 DNLP
+  Wed 15:30-16:30 Teaching (CSCI 3136) :until Apr 8, 2005
+  Wed 3-4:30pm meeting
+  Mon,Wed,Fri 10:30-11:30 meeting (product team)
+  Mon 13-14 seminar :biweekly :start Mar 8, 2004
+  Tue,Thu 10-11:30 Class (ECMM 6014) Location: MCCAIN ARTS&SS 2022 :until Apr 8, 2004
+  1st,3rd Tue 10-11 meeting
+  1st,last Mon,Fri 4-5 meeting (4 meetings every month)
+  4th Thu 11:30-13 meeting (fcm)
 
 =head1 STATE VARIABLES
 
@@ -585,6 +626,10 @@ More format examples:
   Mon,Wed,Fri 15:30-16:30 meeting (product team)
   Mon 13-14 seminar :biweekly :start Mar 8, 2004
   Tue,Thu 10-11:30 Class (ECMM 6014) Location: MCCAIN ARTS&SS 2022 :until Apr 8, 2004
+  1st,3rd Tue 10-11 meeting
+  1st,last Mon,Fri 4-5 meeting (4 meetings every month)
+
+More examples can be found in section "Example entries".
 
 =cut
 sub add_entry {
@@ -604,6 +649,10 @@ sub add_entry {
 	    { $timeslot = $&; $description = $'; }
 	    #<? $CP.="Wed 3-4:30pm meeting\n" !>
 	    elsif (/^$REweekday3(?:,$REweekday3)*\s+\d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)? /)
+	    { $timeslot = $&; $description = $'; }
+	    #<? $CP.="3rd Tue 3-4:30pm meeting\n" !>
+	    elsif (/^$RE1st(,$RE1st)*
+                    \ $REweekday3(?:,$REweekday3)*\s+\d\d?(:\d\d)?-\d\d?(:\d\d)?([ap]m)?\ /x)
 	    { $timeslot = $&; $description = $'; }
 	    #iso8601 thanks to Mike Vasiljevs
 	    elsif (/^(\d\d\d\d-\d\d-\d\d)T(\d\d:\d\d:\d\d)-
@@ -655,7 +704,6 @@ sub add_entry {
 	    
 	    foreach my $d (split(/,/, $days)) {
 		my %vevent = ();
-
 		$vevent{'RRULE'} = $rrule;
 		$vevent{'DTSTART'} = $self->find_next_time("$d $stime", $starttime);
 		$vevent{'DTEND'}   = $self->find_next_time("$d $etime", $vevent{'DTSTART'});
@@ -664,6 +712,52 @@ sub add_entry {
 	    }
 	    return;
 	}
+	# pattern 1:
+	elsif ($timeslot =~ /^($RE1st(?:,$RE1st)*)\s+
+	            ($REweekday3(?:,$REweekday3)*)\s+
+	            (\d\d?(?::\d\d)?)-(\d\d?(?::\d\d)?)([ap]m)?$
+	            /ix) {   # pattern 1:
+	    my ($first,$days,$stime,$etime,$ampm) = ($1,$2,$3,$4,$5);
+	    $stime .= $ampm; $etime .= $ampm;
+	    # example: RRULE:FREQ=MONTHLY;BYDAY=+3TU
+	    my $rrule = 'FREQ=MONTHLY'; my @first;
+	    foreach my $f (split(/,/, $first)) {
+		my $f1;
+		if    ($f =~ /^first|1st$/)  { $f1 = '+1' }
+		elsif ($f =~ /^second|2nd$/) { $f1 = '+2' }
+		elsif ($f =~ /^third|3rd$/)  { $f1 = '+3' }
+		elsif ($f =~ /^fourth|4th$/) { $f1 = '+4' }
+		elsif ($f =~ /^fifth|5th$/)  { $f1 = '+5' }
+		elsif ($f =~ /^last$/)       { $f1 = '-1' }
+		else {die}
+		push @first, $f1 unless grep {$f1 eq $_} @first;
+	    }
+	    my @days; $rrule.=';BYDAY=';
+	    my $startime = $self->{'StartTime'}; my ($st,$et);
+	    foreach my $d (split(/,/, $days)) {
+		my $d1 = &weekday_to_WK($d);
+		push @days, $d1 unless grep {$d1 eq $_} @days;
+		for my $f (@first) {
+		    $rrule.=',' unless $rrule =~ /=$/;
+		    $rrule.="$f$d1";
+		    my $t = $self->find_next_time("$d $stime", $starttime);
+		    for (my $i=0;$i<=500;++$i,$t+=7*24*60*60) {
+			if (is_week_in_month($f,$t) and
+			    ($t<$st or $st==0)) {
+			    $st = $t;
+			    $et = $self->find_next_time("$d $etime", $st);
+			}
+		    }
+		}
+	    }
+	    my %vevent = ();
+	    $vevent{'RRULE'} = $rrule;
+	    $vevent{'DTSTART'} = $st;
+	    $vevent{'DTEND'}   = $et;
+	    $vevent{'SUMMARY'} = $description;
+	    push @{ $self->{'VEvents'} }, \%vevent;
+	    return;
+	} # end of pattern 1:
         # thanks to Mike Vasiljevs:
         # 25 may 2006, adding matching for iso8601 dates
         #
@@ -676,7 +770,6 @@ sub add_entry {
 	    ##correct is to use second date in endtime, but it may lead to time leaks!?
 	    #$endtime   = parse_time("$3 $hend$mend");
 	}
-
 	elsif ($timeslot =~ /^($REweekday3(?:,$REweekday3)*)$/) {
 	    my ($days) = ($1);
 
@@ -920,9 +1013,62 @@ sub generate_table {
 		else { @b = localtime($d+$ve->{'DTSTART'} + 60) }
 		$d += ($a[8]-$b[8])*3600; # daylight saving
 	    }
-
 	}
-    }
+	# example: RRULE:FREQ=MONTHLY;BYDAY=+3TU
+	elsif (exists($ve->{'RRULE'}) &&
+	    $ve->{'RRULE'} =~ /\bFREQ=MONTHLY;BYDAY=([^;]+)\b/) {
+	    my $byday = $1;
+	    my $interval = 1;
+	    if ($ve->{'RRULE'} =~ /\bINTERVAL=(\d+)/) { $interval = $1 }
+	    my $until = undef;	    
+	    if ($ve->{'RRULE'} =~ /\bUNTIL=(\d+)/) { $until = $1 }
+	    my $d = 0;
+	    my @byday = split(/,/,$byday);
+	    my @fwd = (); my %wds;
+	    for my $bd (@byday) {
+		$bd =~ /^([+-][1-5])(\w\w)$/ or die;
+		my $f = $1, my $wd = $2; push @fwd, $f, $wd;
+		$wds{$wd} = 1;
+	    }
+	    my $wdnumber = scalar(keys %wds);
+
+	    my $daysincrement = 1;
+	    while ($d + $ve->{'DTSTART'} < $mondaytime + 86400*scalar(@showdays)) {
+		if (defined($until) && $d+$ve->{'DTSTART'} > $until) { last }
+		if ($d+$ve->{'DTSTART'} < $mondaytime) { goto L1 }
+		my $flag = '';
+		#for my $bd (@byday) {
+		#$bd =~ /^([+-][1-5])(\w\w)$/ or die;
+		for(my $i=0; $i<=$#fwd; $i+=2) {
+		    my $f = $fwd[$i]; my $wd = $fwd[$i+1];
+		    next unless weekday_to_digits($wd)==
+			(localtime($d + $ve->{'DTSTART'}))[6];
+		    next unless is_week_in_month($f, $d + $ve->{'DTSTART'});
+		    $flag = 1; last;
+		}
+		goto L1 unless $flag;
+		if ($d+$ve->{'DTSTART'} >= $mondaytime) {
+		    if (exists($ve->{'DTEND'})) {
+			push @prepareEntries,
+			{ starttime => $d+$ve->{'DTSTART'},
+			  endtime   => $d+$ve->{'DTEND'},
+			  description => $ve->{'SUMMARY'} };
+		    } else {
+			push @dayEntries,
+			{ date => $d+$ve->{'DTSTART'},
+			  description => $ve->{'SUMMARY'} };
+		    }
+		}
+		if ($daysincrement==1 and $wdnumber==1) { $daysincrement=7 }
+		
+	      L1:
+		my $t1 = $d+$ve->{'DTSTART'};
+		my $t2 = days_increment_DSaware($t1,$daysincrement);
+		if ($interval>1) { die "TODO" }
+		$d = $t2 - $ve->{'DTSTART'};
+	    }
+	} # $ve->{'RRULE'} =~ /\bFREQ=MONTHLY;BYDAY=([^;]+)\b/
+    }  # foreach my $ve ( @{ $self->{'VEvents'} } ) {
 
     push @prepareEntries, @{ $self->{'Entries1'} };
 
@@ -1041,15 +1187,57 @@ sub generate_table {
     return $r;
 }
 
+=back
+
+=head1 FUNCTIONS
+
+=cut
+
+sub is_week_in_month {
+    my $f = shift; # +1, +2, +3, +4, +5, or -1
+    my $t = shift; # time in epoch sec
+    my $d = (localtime($t))[3];
+    my $m = (localtime($t))[4]; #0=Jan
+    my ($lb,$ub);
+    die if $f>5 or $f<-5;
+    if ($f>0) { $lb = 7*$f-6; $ub = 7*$f; }
+    elsif ($f<0) {
+	my $t1=$t;
+	for(;;) { # find last day in the month
+	    $t1+=24*60*60;
+	    last if (localtime($t1))[4] != $m;
+	}
+	$t1-=24*60*60;
+	$ub = (localtime($t1))[3] + ($f+1)*7;
+	$lb = $ub - 6;
+    }
+    else { return 1 }
+    return 1 if $d>=$lb and $d<=$ub;
+    return 0;
+}
+
 sub weekday_to_digits {
     local $_ = shift;
-    s/\b(?:SUN(?:DAY)?|Sun(?:day)?)\b/00/g;
-    s/\b(?:MON(?:DAY)?|Mon(?:day)?)\b/01/xg;
-    s/\b(?:TUE(?:SDAY)?|Tue(?:sday)?)\b/02/xg;
-    s/\b(?:WED(?:NESDAY)?|Wed(?:nesday)?)\b/03/xg;
-    s/\b(?:THU(?:RSDAY)?|Thu(?:rsday)?)\b/04/xg;
-    s/\b(?:FRI(?:DAY)?|Fri(?:day)?)\b/05/xg;
-    s/\b(?:SAT(?:URDAY)?|Sat(?:urday)?)\b/06/xg;
+    s/\b(?:SUN?(?:DAY)?|Sun(?:day)?)\b/00/g;
+    s/\b(?:MON?(?:DAY)?|Mon(?:day)?)\b/01/xg;
+    s/\b(?:TUE?(?:SDAY)?|Tue(?:sday)?)\b/02/xg;
+    s/\b(?:WED?(?:NESDAY)?|Wed(?:nesday)?)\b/03/xg;
+    s/\b(?:THU?(?:RSDAY)?|Thu(?:rsday)?)\b/04/xg;
+    s/\b(?:FRI?(?:DAY)?|Fri(?:day)?)\b/05/xg;
+    s/\b(?:SAT?(?:URDAY)?|Sat(?:urday)?)\b/06/xg;
+    return $_;
+}
+
+# weekday to two uppercase letters
+sub weekday_to_WK {
+    local $_ = shift;
+    s/\b(?:SUN(?:DAY)?|Sun(?:day)?)\b      /SU/xg;
+    s/\b(?:MON(?:DAY)?|Mon(?:day)?)\b      /MO/xg;
+    s/\b(?:TUE(?:SDAY)?|Tue(?:sday)?)\b    /TU/xg;
+    s/\b(?:WED(?:NESDAY)?|Wed(?:nesday)?)\b/WE/xg;
+    s/\b(?:THU(?:RSDAY)?|Thu(?:rsday)?)\b  /TH/xg;
+    s/\b(?:FRI(?:DAY)?|Fri(?:day)?)\b      /FR/xg;
+    s/\b(?:SAT(?:URDAY)?|Sat(?:urday)?)\b  /SA/xg;
     return $_;
 }
 
@@ -1068,6 +1256,24 @@ sub month_to_digits {
     s/\b(?:NOV(?:EMBER)?|Nov(?:ember)?)\b/10/xg;
     s/\b(?:DEC(?:EMBER)?|Dec(?:ember)?)\b/11/xg;
     return $_;
+}
+
+# increment time for certain number of days, daylight saving aware
+my %days_increment_DSaware_memo = ();
+sub days_increment_DSaware {
+    my $t = shift; my $i = shift;
+    if (scalar(keys %days_increment_DSaware_memo)>1000000)
+    { %days_increment_DSaware_memo = () }
+    if (defined($days_increment_DSaware_memo{"$t $i"}))
+    { return $days_increment_DSaware_memo{"$t $i"} }
+    my $t1 = $t + 86400*$i;
+    my @a = localtime($t);
+    my $t2 = $t1;
+    if ($a[2]==0 && $a[1]==0) { $t2 += 60 } # problem with 00:00
+    my @b = localtime($t);
+    $t1 += ($a[8]-$b[8])*3600; # daylight saving
+    $days_increment_DSaware_memo{"$t $i"} = $t1;
+    return $t1;
 }
 
 sub _table_add {
@@ -1133,8 +1339,6 @@ sub _table_get {
 
 =pod
 
-=back
-
 =cut
 
 sub _getfile($) {
@@ -1156,7 +1360,7 @@ for ISO8601 format.
 
 =head1 AUTHOR
 
-Copyright 2003-2008 Vlado Keselj http://www.cs.dal.ca/~vlado
+Copyright 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 
 This script is provided "as is" without expressed or implied warranty.
 This is free software; you can redistribute it and/or modify it under
