@@ -1,6 +1,6 @@
 # (c) 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm 121 2010-01-26 12:22:37Z vlado $
+# $Id: Schedule.pm 124 2010-01-27 17:25:11Z vlado $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,12 +17,12 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 121 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 124 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 $RE1st );
@@ -1022,7 +1022,6 @@ sub generate_table {
 	    if ($ve->{'RRULE'} =~ /\bINTERVAL=(\d+)/) { $interval = $1 }
 	    my $until = undef;	    
 	    if ($ve->{'RRULE'} =~ /\bUNTIL=(\d+)/) { $until = $1 }
-	    my $d = 0;
 	    my @byday = split(/,/,$byday);
 	    my @fwd = (); my %wds;
 	    for my $bd (@byday) {
@@ -1030,42 +1029,50 @@ sub generate_table {
 		my $f = $1, my $wd = $2; push @fwd, $f, $wd;
 		$wds{$wd} = 1;
 	    }
-	    my $wdnumber = scalar(keys %wds);
 
-	    my $daysincrement = 1;
-	    while ($d + $ve->{'DTSTART'} < $mondaytime + 86400*scalar(@showdays)) {
-		if (defined($until) && $d+$ve->{'DTSTART'} > $until) { last }
-		if ($d+$ve->{'DTSTART'} < $mondaytime) { goto L1 }
-		my $flag = '';
-		#for my $bd (@byday) {
-		#$bd =~ /^([+-][1-5])(\w\w)$/ or die;
-		for(my $i=0; $i<=$#fwd; $i+=2) {
-		    my $f = $fwd[$i]; my $wd = $fwd[$i+1];
-		    next unless weekday_to_digits($wd)==
-			(localtime($d + $ve->{'DTSTART'}))[6];
-		    next unless is_week_in_month($f, $d + $ve->{'DTSTART'});
-		    $flag = 1; last;
-		}
-		goto L1 unless $flag;
-		if ($d+$ve->{'DTSTART'} >= $mondaytime) {
+	    my $eventstarti = $ve->{'DTSTART'};
+	    my $daysincrement = (scalar(keys %wds)==1? 7 : 1);
+	    unless (defined($ve->{_cache_next}))
+	    { $ve->{_cache_next} = { } }
+	    while ($eventstarti < $mondaytime + 86400*scalar(@showdays)) {
+		last if defined($until) && $eventstarti > $until;
+		goto L1 if $eventstarti < $mondaytime;
+		if ($eventstarti >= $mondaytime) {
 		    if (exists($ve->{'DTEND'})) {
 			push @prepareEntries,
-			{ starttime => $d+$ve->{'DTSTART'},
-			  endtime   => $d+$ve->{'DTEND'},
+			{ starttime => $eventstarti,
+			  endtime   => $eventstarti - $ve->{'DTSTART'}
+			               + $ve->{'DTEND'},
 			  description => $ve->{'SUMMARY'} };
 		    } else {
 			push @dayEntries,
-			{ date => $d+$ve->{'DTSTART'},
+			{ date => $eventstarti,
 			  description => $ve->{'SUMMARY'} };
 		    }
 		}
-		if ($daysincrement==1 and $wdnumber==1) { $daysincrement=7 }
 		
 	      L1:
-		my $t1 = $d+$ve->{'DTSTART'};
-		my $t2 = days_increment_DSaware($t1,$daysincrement);
-		if ($interval>1) { die "TODO" }
-		$d = $t2 - $ve->{'DTSTART'};
+		if (defined($ve->{_cache_next}{$eventstarti}))
+		{ $eventstarti = $ve->{_cache_next}{$eventstarti} }
+		else {
+		    my $t1 = $eventstarti;
+		  L2:
+		    my $t2 = days_increment_DSaware($t1,$daysincrement);
+		    last unless $t2 < $mondaytime + 86400*scalar(@showdays);
+		    last if defined($until) && $t2 > $until;
+		    if ($interval>1) { die "TODO" }
+		    my $flag = '';
+		    for(my $i=0; $i<=$#fwd; $i+=2) {
+			my $f = $fwd[$i]; my $wd = $fwd[$i+1];
+			next unless weekday_to_digits($wd)==
+			    (localtime($t2))[6];
+			next unless is_week_in_month($f, $t2);
+			$flag = 1; last;
+		    }
+		    $t1 = $t2;
+		    goto L2 unless $flag;
+		    $eventstarti = $ve->{_cache_next}{$eventstarti} = $t1;
+		}
 	    }
 	} # $ve->{'RRULE'} =~ /\bFREQ=MONTHLY;BYDAY=([^;]+)\b/
     }  # foreach my $ve ( @{ $self->{'VEvents'} } ) {
@@ -1259,20 +1266,14 @@ sub month_to_digits {
 }
 
 # increment time for certain number of days, daylight saving aware
-my %days_increment_DSaware_memo = ();
 sub days_increment_DSaware {
     my $t = shift; my $i = shift;
-    if (scalar(keys %days_increment_DSaware_memo)>1000000)
-    { %days_increment_DSaware_memo = () }
-    if (defined($days_increment_DSaware_memo{"$t $i"}))
-    { return $days_increment_DSaware_memo{"$t $i"} }
     my $t1 = $t + 86400*$i;
     my @a = localtime($t);
     my $t2 = $t1;
     if ($a[2]==0 && $a[1]==0) { $t2 += 60 } # problem with 00:00
     my @b = localtime($t);
     $t1 += ($a[8]-$b[8])*3600; # daylight saving
-    $days_increment_DSaware_memo{"$t $i"} = $t1;
     return $t1;
 }
 

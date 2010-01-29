@@ -1,5 +1,9 @@
 Revision history for Perl extension Calendar::Schedule.
 
+1.03  Fri Jan 29 07:29:55 AST 2010
+	- code tightening and optimization
+	- introduced caching in calculating recurr. events
+	
 1.02  Tue Jan 26 08:22:28 AST 2010
 	- documentation improvement
 	- import to svn
