@@ -1,6 +1,6 @@
 # (c) 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm 124 2010-01-27 17:25:11Z vlado $
+# $Id: Schedule.pm 141 2010-03-12 12:17:01Z vlado $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,12 +17,12 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 124 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 141 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 $RE1st );
@@ -1269,10 +1269,13 @@ sub month_to_digits {
 sub days_increment_DSaware {
     my $t = shift; my $i = shift;
     my $t1 = $t + 86400*$i;
-    my @a = localtime($t);
-    my $t2 = $t1;
-    if ($a[2]==0 && $a[1]==0) { $t2 += 60 } # problem with 00:00
-    my @b = localtime($t);
+    my $t2 = $t; my $t3 = $t1;
+    my @a = localtime($t2);
+    if ($a[2]==0 && $a[1]==0)	# problem with 0h and 23h
+    { $t2 += 60; $t3 += 60; @a = localtime($t2); }
+    elsif ($a[2]==23) { $t2 -= 60; $t3 -= 60; @a = localtime($t2); }
+
+    my @b = localtime($t3);
     $t1 += ($a[8]-$b[8])*3600; # daylight saving
     return $t1;
 }
