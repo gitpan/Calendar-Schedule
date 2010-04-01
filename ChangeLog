@@ -1,5 +1,9 @@
 Revision history for Perl extension Calendar::Schedule.
 
+1.05  Thu Apr  1 11:02:24 ADT 2010
+	- fixed (hopefully) another bug with crossing daylight-saving
+	  boundary
+
 1.04  Fri Mar 12 08:16:49 AST 2010
 	- fixed a bug with crossing daylight-saving boundary
 	

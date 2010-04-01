@@ -1,6 +1,6 @@
 # (c) 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm 141 2010-03-12 12:17:01Z vlado $
+# $Id: Schedule.pm 143 2010-04-01 14:02:37Z vlado $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,12 +17,12 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 141 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 143 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 $RE1st );
@@ -706,7 +706,9 @@ sub add_entry {
 		my %vevent = ();
 		$vevent{'RRULE'} = $rrule;
 		$vevent{'DTSTART'} = $self->find_next_time("$d $stime", $starttime);
-		$vevent{'DTEND'}   = $self->find_next_time("$d $etime", $vevent{'DTSTART'});
+		$vevent{'DTEND'}   = $self->find_next_time("$d $etime", $starttime);
+                while ($vevent{'DTEND'} < $vevent{'DTSTART'})
+		{ $vevent{'DTEND'}   = $self->find_next_time("$d $etime", $vevent{'DTEND'}) }
 		$vevent{'SUMMARY'} = $description;
 		push @{ $self->{'VEvents'} }, \%vevent;
 	    }
@@ -1359,8 +1361,9 @@ __END__
 
 =head1 THANKS
 
-I would like to thank Mike Vasiljevs for his suggestions and patches
-for ISO8601 format.
+I would like to thank Stefan Goebel for his report and detailed
+analysis of a bug and suggestions, and Mike Vasiljevs for his
+suggestions and patches for ISO8601 format.
 
 =head1 AUTHOR
 
