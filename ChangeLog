@@ -1,5 +1,9 @@
 Revision history for Perl extension Calendar::Schedule.
 
+1.06  Wed Jan 12 10:07:36 AST 2011
+	- documented DefaultRowLabels instance variable
+	- documentation improvement
+
 1.05  Thu Apr  1 11:02:24 ADT 2010
 	- fixed (hopefully) another bug with crossing daylight-saving
 	  boundary

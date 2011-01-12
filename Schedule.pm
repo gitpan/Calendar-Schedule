@@ -1,6 +1,6 @@
-# (c) 2003-2010 Vlado Keselj http://www.cs.dal.ca/~vlado
+# (c) 2003-2011 Vlado Keselj http://web.cs.dal.ca/~vlado
 #
-# $Id: Schedule.pm 143 2010-04-01 14:02:37Z vlado $
+# $Id: Schedule.pm 152 2010-04-12 11:00:11Z vlado $
 # <? read_starfish_conf(); !>
  
 package Calendar::Schedule;
@@ -17,12 +17,12 @@ our @EXPORT = qw(new);
 
 #<?echo "our \$VERSION = '$Meta->{version}';"!>
 #+
-our $VERSION = '1.05';
+our $VERSION = '1.06';
 #-
 
 use vars qw($Version $Revision);
 $Version = $VERSION;
-($Revision = substr(q$Revision: 143 $, 10)) =~ s/\s+$//;
+($Revision = substr(q$Revision: 152 $, 10)) =~ s/\s+$//;
 
 # non-exported package globals
 use vars qw( $REweekday3 $REmonth3 $RE1st );
@@ -448,8 +448,16 @@ Examples:
 
 =item StartTime
 
-Start time for various uses.  Usually it is the the beginning of the
-first interesting week.
+Used as C<$obj-E<gt>{StartTime}>. Start time for various uses.
+Usually it is the the beginning of the first interesting week.
+
+=item DefaultRowLabels
+
+Used as C<$obj-E<gt>{DefaultRowLabels}>.  Includes pre-defined labels
+for rows of the generated HTML schedule tables.  The pre-defined value
+is:
+
+    $self->{DefaultRowLabels} = [qw( 08:00 12:00 17:00 )];
 
 =back
 
@@ -947,7 +955,7 @@ sub todo_list {
 
 Returns a weekly table in HTML.  Starts with NextTableTime (or
 StartTime if NextTableTime does not exist), and updates NextTableTime
-so that consecutive call produces a new table.
+so that consecutive call produces the table for the following week.
 
 The table column headers can be can be changed by setting the field
 $obj->{ColLabel} to a format as used by the standard function
@@ -961,6 +969,13 @@ The format "%A" would produce just the weekday name.
 
 Use $obj->{ShowDays} = 'workdays'; to display only work-days; i.e.,
 Monday to Friday.
+
+The table rows include time labeles which are start times and end
+times of the events that happend to fall in the table time range, with
+additional labels from the variable C<$obj-E<gt>{DefaultRowLabels}>.
+The default value of the variable DefaulRowLabels is defined as:
+
+    $self->{DefaultRowLabels} = [qw( 08:00 12:00 17:00 )];
 
 =cut
 sub generate_table {
@@ -1129,6 +1144,7 @@ sub generate_table {
             "<td valign=top>\&nbsp;</td>\n";
     my @op = @{ $self->{overlap} };
     foreach my $di (0 .. $#col_label) {
+	$op[$di] = 0 unless defined($op[$di]);
 	if ($op[$di] > 0) { $r.= "<th colspan=$op[$di]>" } else { $r.="<th>" }
 	$r .= $col_label[$di]."</th>\n";
     }
@@ -1318,6 +1334,7 @@ sub _table_add {
 	    if ($overlap > $oldoverlap) { push @trows, @rows }
 	}
     }
+    $self->{overlap}[$col] = 0 unless defined($self->{overlap}[$col]);
     $self->{overlap}[$col] = $overlap if $overlap > $self->{overlap}[$col];
 
     $row = shift @rows;
